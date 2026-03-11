@@ -1,4 +1,5 @@
 <Solution>
+  <Project Path="Itm.Gateway.Api/Itm.Gateway.Api.csproj" Id="0a5a8998-74eb-4d39-8756-91899e8e4d8f" />
   <Project Path="Itm.Inventory.Api/Itm.Inventory.Api.csproj" />
   <Project Path="Itm.Price.Api/Itm.Price.Api.csproj" Id="1619a95b-fae6-401e-917a-b8b843d9ff5d" />
   <Project Path="Itm.Product.Api/Itm.Product.Api.csproj" />
