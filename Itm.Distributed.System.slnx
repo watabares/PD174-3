@@ -3,4 +3,5 @@
   <Project Path="Itm.Inventory.Api/Itm.Inventory.Api.csproj" />
   <Project Path="Itm.Price.Api/Itm.Price.Api.csproj" Id="1619a95b-fae6-401e-917a-b8b843d9ff5d" />
   <Project Path="Itm.Product.Api/Itm.Product.Api.csproj" />
+  <Project Path="Order.Api/Order.Api.csproj" />
 </Solution>

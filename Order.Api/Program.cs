@@ -1,3 +1,4 @@
+using Order.Api;
 using System.Net.Http.Json;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -20,12 +21,8 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-// DTOs locales
-record CreateOrderDto(int ProductId, int Quantity);
-record PaymentDto(int OrderId, decimal Amount);
-
 // Endpoint de creación de orden con lógica SAGA (reservar stock + compensar si falla pago)
-RouteHandlerBuilder routeHandlerBuilder = app.MapPost("/api/orders", async (CreateOrderDto order, IHttpClientFactory factory) =>
+app.MapPost("/api/orders", async (CreateOrderDto order, IHttpClientFactory factory) =>
 {
     var invClient = factory.CreateClient("InventoryClient");
 
