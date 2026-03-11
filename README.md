@@ -1,17 +1,21 @@
 # Itm.Distributed.System
 
-Sistema distribuido de ejemplo para el curso de Arquitectura de Software (Clases 1 y 2).
+Sistema distribuido de ejemplo para el curso de Arquitectura de Software (Clases 1 a 5).
 
-Este proyecto muestra cómo pasar de un monolito a una arquitectura de microservicios sencilla usando .NET 8 y Minimal APIs:
+Este proyecto muestra cómo pasar de un monolito a una arquitectura de microservicios usando .NET 8 y Minimal APIs:
 
-- `Itm.Inventory.Api` – Servicio de Inventario (dueño del stock)
-- `Itm.Price.Api` – Servicio de Precios (dueño del dinero)
-- `Itm.Product.Api` – Orquestador / BFF que compone información de los otros dos
+- `Itm.Inventory.Api` – Servicio de Inventario (dueño del stock, protegido con JWT).
+- `Itm.Price.Api` – Servicio de Precios (dueño del dinero).
+- `Itm.Product.Api` – Orquestador / BFF que compone información de Inventario y Precios.
+- `Order.Api` – Servicio de Órdenes que primero actúa como orquestador clásico (Clase 3) y luego implementa una SAGA orquestada (Clase 4).
+- `Itm.Gateway.Api` – API Gateway basado en YARP que expone solo las rutas necesarias hacia los microservicios internos.
+
+---
 
 ## 1. Requisitos
 
-- Visual Studio 2022 o superior (carga de trabajo "Desarrollo ASP.NET y Web")
-- SDK .NET 8.0 instalado
+- Visual Studio 2022 o superior (carga de trabajo "Desarrollo ASP.NET y Web").
+- SDK .NET 8.0 instalado.
 
 Verificar SDK:
 
@@ -19,136 +23,199 @@ Verificar SDK:
 dotnet --version
 ```
 
-## 2. Proyectos
+---
+
+## 2. Proyectos de la solución
 
 ### 2.1. Itm.Inventory.Api
 
-Microservicio que expone el stock disponible de cada producto.
+Microservicio que expone y muta el stock disponible de cada producto.
 
-- DTO principal: `Itm.Inventory.Api/Dtos/InventoryDto.cs`
-- Endpoint:
+- DTOs principales:
+  - `InventoryDto` – respuesta de stock (`productId`, `stock`, `sku`).
+  - `ReduceStockDto` – input para reducir stock (`productId`, `quantity`).
+- Endpoints principales:
+  - `GET /api/inventory/{id}` – devuelve inventario de un producto (protegido con JWT).
+  - `POST /api/inventory/reduce` – reduce stock; valida existencia y cantidad.
+  - `POST /api/inventory/release` – compensación: devuelve stock ante fallo de pago (SAGA).
 
-```http
-GET /api/inventory/{id}
-```
+Ejemplo de `POST /api/inventory/reduce` (Clase 3):
 
-Ejemplo de respuesta:
-
-```json
+```csharp
+app.MapPost("/api/inventory/reduce", (ReduceStockDto request) =>
 {
-  "productId": 1,
-  "stock": 50,
-  "sku": "LAPTOP-DELL"
-}
+    var item = inventoryDb.FirstOrDefault(p => p.ProductId == request.ProductId);
+    if (item is null)
+    {
+        return Results.NotFound(new { Error = "Producto no existe en bodega" });
+    }
+
+    if (item.Stock < request.Quantity)
+    {
+        return Results.BadRequest(new { Error = "Stock insuficiente", CurrentStock = item.Stock });
+    }
+
+    var index = inventoryDb.IndexOf(item);
+    inventoryDb[index] = item with { Stock = item.Stock - request.Quantity };
+
+    return Results.Ok(new { Message = "Stock actualizado", NewStock = inventoryDb[index].Stock });
+});
 ```
+
+Ejemplo de `POST /api/inventory/release` (Clase 4):
+
+```csharp
+app.MapPost("/api/inventory/release", (ReduceStockDto request) =>
+{
+    var item = inventoryDb.FirstOrDefault(p => p.ProductId == request.ProductId);
+    if (item is null) return Results.NotFound();
+
+    var index = inventoryDb.IndexOf(item);
+    inventoryDb[index] = item with { Stock = item.Stock + request.Quantity };
+
+    return Results.Ok(new { Message = "Stock liberado por fallo en transacción", CurrentStock = inventoryDb[index].Stock });
+});
+```
+
+Seguridad (JWT) configurada vía `JwtSettings` en `appsettings.json` y `AddAuthentication(JwtBearerDefaults.AuthenticationScheme)` en `Program.cs`.
 
 ### 2.2. Itm.Price.Api
 
-Microservicio que expone el precio y la moneda de cada producto.
+Microservicio de precios. Devuelve el valor y la moneda de un producto.
 
-- DTO principal: `Itm.Price.Api/Dtos/PriceDto.cs`
-- Endpoint:
-
-```http
-GET /api/prices/{id}
-```
-
-Ejemplo de respuesta:
-
-```json
-{
-  "productId": 1,
-  "amount": 1500.0,
-  "currency": "USD"
-}
-```
+- Endpoint: `GET /api/prices/{id}`.
+- Usado por `Itm.Product.Api` y `Order.Api` para calcular montos.
 
 ### 2.3. Itm.Product.Api
 
-Orquestador (Backend for Frontend, BFF). No tiene base de datos propia; consume `Inventory` y `Price` para devolver un JSON agregado.
+Backend for Frontend (BFF). Orquesta llamados a Inventario y Precios en paralelo usando `Task.WhenAll`.
 
-Clientes HTTP configurados en `Itm.Product.Api/Program.cs`:
+Endpoints clave:
+
+- `GET /api/products/{id}/check-stock` – solo inventario.
+- `GET /api/products/{id}/summary` – inventario + precio en paralelo.
+
+### 2.4. Order.Api (Clases 3 y 4)
+
+Microservicio de órdenes que cumple dos roles a lo largo del curso:
+
+1. **Clase 3 – Orquestador clásico:**
+   - Recibe una orden (`productId`, `quantity`).
+   - Llama a `Inventory.Api` para verificar stock (GET o POST reduce).
+   - Llama a `Price.Api` para obtener precio.
+   - Calcula total y devuelve una "factura" JSON.
+
+2. **Clase 4 – SAGA orquestada:**
+   - Reserva stock en `Itm.Inventory.Api` (`/reduce`).
+   - Simula pago.
+   - Si el pago falla, compensa llamando a `/release`.
+
+Ejemplo simplificado de la SAGA (actual `Program.cs`):
 
 ```csharp
-builder.Services.AddHttpClient("InventoryClient", client =>
+app.MapPost("/api/orders", async (CreateOrderDto order, IHttpClientFactory factory) =>
 {
-    client.BaseAddress = new Uri("http://localhost:5293");
-    client.Timeout = TimeSpan.FromSeconds(5);
+    var invClient = factory.CreateClient("InventoryClient");
+
+    var reduceResponse = await invClient.PostAsJsonAsync("/api/inventory/reduce", order);
+    if (!reduceResponse.IsSuccessStatusCode)
+    {
+        return Results.BadRequest("No se pudo reservar el stock. Transacción abortada.");
+    }
+
+    try
+    {
+        bool paymentSuccess = new Random().Next(0, 10) > 5;
+        if (!paymentSuccess)
+        {
+            throw new InvalidOperationException("Fondos Insuficientes en la Tarjeta");
+        }
+
+        return Results.Ok(new { Message = "Orden Creada y Pagada Exitosamente" });
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"[ERROR] Falló el pago: {ex.Message}. Iniciando compensación...");
+
+        var compensateResponse = await invClient.PostAsJsonAsync("/api/inventory/release", order);
+
+        if (compensateResponse.IsSuccessStatusCode)
+        {
+            return Results.Problem("El pago falló. El stock fue devuelto correctamente. Intente de nuevo.");
+        }
+
+        Console.WriteLine("[CRITICAL] Falló la compensación. Datos inconsistentes.");
+        return Results.Problem("Error crítico del sistema. Contacte soporte.");
+    }
 });
-
-builder.Services.AddHttpClient("PriceClient", client =>
-{
-    client.BaseAddress = new Uri("http://localhost:5012");
-});
 ```
 
-Endpoints principales:
+### 2.5. Itm.Gateway.Api (Clase 5 – API Gateway con YARP)
 
-1. Solo inventario
+Gateway basado en [YARP](https://microsoft.github.io/reverse-proxy/) que actúa como **punto de entrada único** para los microservicios. En este ejemplo, enruta hacia `Itm.Inventory.Api`.
 
-```http
-GET /api/products/{id}/check-stock
-```
+Configuración de `ReverseProxy` y `Program.cs` descrita en la versión anterior del README.
 
-2. Resumen completo (paralelo: inventario + precios)
+---
 
-```http
-GET /api/products/{id}/summary
-```
+## 3. Clases 1–5 resumidas
 
-Ejemplo de respuesta del resumen:
+### Clase 1–2: Fundamentos, BFF y paralelismo
 
-```json
-{
-  "id": 1,
-  "product": "Laptop Gamer Pro",
-  "stockDetails": {
-    "productId": 1,
-    "stock": 50,
-    "sku": "LAPTOP-DELL"
-  },
-  "financialDetails": {
-    "productId": 1,
-    "amount": 1500.0,
-    "currency": "USD"
-  },
-  "calculatedAt": "2026-02-20T10:00:00Z"
-}
-```
+- Separación de dominios: `Inventory`, `Price`, `Product`.
+- Uso de DTOs (`record`) para bajo acoplamiento.
+- `HttpClientFactory` para llamadas entre servicios.
+- `Task.WhenAll` para reducir latencia en consultas compuestas.
 
-## 3. Cómo ejecutar el ecosistema
+### Clase 3: Mutación de estado e integración inicial (Order.Api)
 
-1. Configurar proyectos de inicio múltiples en la solución:
-   - `Itm.Inventory.Api` – Iniciar
-   - `Itm.Price.Api` – Iniciar
-   - `Itm.Product.Api` – Iniciar
+Escenario: "Venta fantasma" – el sistema solo lee stock y precio, pero no puede vender (no hay POST ni mutación).
 
-2. Verificar puertos actuales (por defecto en este repo):
-   - Inventory: `http://localhost:5293`
-   - Price: `http://localhost:5012`
-   - Product: `http://localhost:5298`
+- Se introduce `POST` en `Itm.Inventory.Api` para **mutar estado** (`/reduce`).
+- Se valida negocio: no vender si no hay stock suficiente.
+- Se crea `Order.Api` como **orquestador**:
+  - Verifica stock en `Inventory`.
+  - Obtiene precio en `Price`.
+  - Calcula total y devuelve un resumen/factura de la orden.
 
-3. Ejecutar la solución desde Visual Studio o con CLI:
+Conceptos:
 
-```bash
-dotnet run --project Itm.Inventory.Api/Itm.Inventory.Api.csproj
- dotnet run --project Itm.Price.Api/Itm.Price.Api.csproj
- dotnet run --project Itm.Product.Api/Itm.Product.Api.csproj
-```
+- GET es seguro / idempotente; POST tiene efectos secundarios.
+- Validación de negocio antes de mutar (no stock negativo).
+- Composición de respuestas de múltiples servicios en una sola factura de orden.
 
-4. Probar desde navegador o curl:
+### Clase 4: Transacciones distribuidas y SAGA
 
-```bash
-curl http://localhost:5298/api/products/1/summary
-```
+Escenario: "Pedido fantasma" – pago fallido con stock ya descontado.
 
-## 4. Conceptos de arquitectura cubiertos
+- Problema: no hay ROLLBACK global en microservicios.
+- Solución: **Patrón SAGA Orquestada** con acciones compensatorias.
+- `Order.Api` orquesta; `Inventory.Api` implementa `reduce` + `release`.
 
-- Monolito vs. Microservicios
-- Bajo acoplamiento usando DTOs (`record` inmutables)
-- Uso de `HttpClientFactory` en .NET
-- Patrón API Composition / Backend for Frontend
-- Paralelismo con `Task.WhenAll`
-- Manejo básico de errores en sistemas distribuidos
+### Clase 5: API Gateway y seguridad con JWT
 
-Este repo cubre las dos primeras clases del curso y sirve como base para futuras sesiones sobre resiliencia, seguridad (JWT/API Keys) y observabilidad.
+Escenario: exposición directa de microservicios y riesgo de ataques por "puerta trasera".
+
+- Se introduce `Itm.Gateway.Api` como API Gateway con YARP.
+- Se protege `Itm.Inventory.Api` con JWT.
+- Se refuerza la defensa en profundidad: Gateway + microservicios seguros.
+
+---
+
+## 4. Cómo ejecutar escenarios
+
+(Se mantienen las secciones de ejecución anteriores, añadiendo que en Clase 3 el foco es `Inventory + Order + Price` para la factura inicial, y en Clase 4 se activa SAGA con compensación.)
+
+---
+
+## 5. Notas de arquitectura
+
+El sistema demuestra:
+
+- **Desacoplamiento** entre dominios y contratos claros vía DTOs.
+- **Orquestación sincronizada** (BFF y Order.Api).
+- **Mutación de estado controlada** con validaciones de negocio.
+- **Consistencia eventual** mediante SAGA con acciones compensatorias.
+- **Defensa en profundidad** con API Gateway (YARP) y JWT.
+
+En un entorno productivo se añadirían colas de mensajes para hacer SAGA asíncrona y mejorar resiliencia frente a fallos intermedios.
