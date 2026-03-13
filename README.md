@@ -1,6 +1,6 @@
-# Itm.Distributed.System
+# ITM Distributed System - Microservicios de Ejemplo
 
-Sistema distribuido de ejemplo para el curso de Arquitectura de Software (Clases 1 a 5).
+Sistema distribuido de ejemplo para el curso de Arquitectura de Software (Clases 1 a 6).
 
 Este proyecto muestra cómo pasar de un monolito a una arquitectura de microservicios usando .NET 8 y Minimal APIs:
 
@@ -157,9 +157,21 @@ Gateway basado en [YARP](https://microsoft.github.io/reverse-proxy/) que actúa 
 
 Configuración de `ReverseProxy` y `Program.cs` descrita en la versión anterior del README.
 
+### 2.6. Clase 6 - Event-Driven Architecture y Mensajería Asíncrona
+
+En la Clase 6 se introduce un **Message Broker (RabbitMQ)** usando **CloudAMQP** (PaaS) para evitar instalaciones locales y habilitar una arquitectura **event-driven**:
+
+- Se provisiona un clúster gratuito en CloudAMQP y se usa la **AMQP URL** en los servicios.
+- Se crea la librería compartida `Itm.Shared.Events` con el evento inmutable `OrderCreatedEvent`.
+- `Order.Api` se convierte en **productor** usando **MassTransit.RabbitMQ**, publica `OrderCreatedEvent` a RabbitMQ tras completar la SAGA.
+- Se agrega `Notification.Api` como **consumidor**, con un `OrderCreatedConsumer` que procesa `OrderCreatedEvent` y simula el envío de correos.
+- Se demuestra desacoplamiento temporal: las órdenes se completan aunque `Notification.Api` esté caído, los mensajes quedan retenidos en la cola y se procesan al reactivar el servicio.
+
+Esta clase consolida el paso de integración síncrona (HTTP) a mensajería asíncrona, mejorando resiliencia, escalabilidad y experiencia de usuario.
+
 ---
 
-## 3. Clases 1–5 resumidas
+## 3. Clases 1–6 resumidas
 
 ### Clase 1–2: Fundamentos, BFF y paralelismo
 
@@ -201,6 +213,16 @@ Escenario: exposición directa de microservicios y riesgo de ataques por "puerta
 - Se protege `Itm.Inventory.Api` con JWT.
 - Se refuerza la defensa en profundidad: Gateway + microservicios seguros.
 
+### Clase 6: Arquitectura Orientada a Eventos (EDA) y Mensajería Asíncrona
+
+En la Clase 6 se introduce un **Message Broker (RabbitMQ)** usando **CloudAMQP** (PaaS) para evitar instalaciones locales y habilitar una arquitectura **event-driven**:
+
+- Se provisiona un clúster gratuito en CloudAMQP y se usa la **AMQP URL** en los servicios.
+- Se crea la librería compartida `Itm.Shared.Events` con el evento inmutable `OrderCreatedEvent`.
+- `Order.Api` se convierte en **productor** usando **MassTransit.RabbitMQ**, publica `OrderCreatedEvent` a RabbitMQ tras completar la SAGA.
+- Se agrega `Notification.Api` como **consumidor**, con un `OrderCreatedConsumer` que procesa `OrderCreatedEvent` y simula el envío de correos.
+- Se demuestra desacoplamiento temporal: las órdenes se completan aunque `Notification.Api` esté caído, los mensajes quedan retenidos en la cola y se procesan al reactivar el servicio.
+
 ---
 
 ## 4. Cómo ejecutar escenarios
@@ -218,5 +240,6 @@ El sistema demuestra:
 - **Mutación de estado controlada** con validaciones de negocio.
 - **Consistencia eventual** mediante SAGA con acciones compensatorias.
 - **Defensa en profundidad** con API Gateway (YARP) y JWT.
+- **Arquitectura orientada a eventos** con RabbitMQ, MassTransit y colas de mensajes.
 
 En un entorno productivo se añadirían colas de mensajes para hacer SAGA asíncrona y mejorar resiliencia frente a fallos intermedios.
