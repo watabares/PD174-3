@@ -9,6 +9,7 @@ Este proyecto muestra cómo pasar de un monolito a una arquitectura de microserv
 - `Itm.Product.Api` – Orquestador / BFF que compone información de Inventario y Precios.
 - `Order.Api` – Servicio de Órdenes que primero actúa como orquestador clásico (Clase 3) y luego implementa una SAGA orquestada (Clase 4).
 - `Itm.Gateway.Api` – API Gateway basado en YARP que expone solo las rutas necesarias hacia los microservicios internos.
+- `Notification.Api` – Servicio de notificaciones que en las clases siguientes actuará como consumidor de eventos de dominio (por ejemplo, `OrderCreatedEvent`) publicado por Order.Api a través de RabbitMQ/MassTransit.
 
 ---
 
