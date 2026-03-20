@@ -12,7 +12,7 @@ namespace Itm.Shared.Events;
 public record OrderCreatedEvent(
         Guid OrderId,
         int ProductId,
-        string CustomerEmail,
+        string UserEmail,
         decimal TotalAmount
         );
     
