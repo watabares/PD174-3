@@ -7,8 +7,13 @@
   </PropertyGroup>
 	
 	<ItemGroup>
+		<PackageReference Include="MassTransit.RabbitMQ" Version="8.5.8" />
 		<PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.25" />
 		<PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.0" />
 		<PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
+	</ItemGroup>
+	
+	<ItemGroup>
+	  <ProjectReference Include="..\Itm.Shared.Events\Itm.Shared.Events.csproj" />
 	</ItemGroup>
 </Project>

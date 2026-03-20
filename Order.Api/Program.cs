@@ -34,7 +34,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-// 🧠 Agregamos IPublishEndpoint a los parámetros
+//  Agregamos IPublishEndpoint a los parámetros
 app.MapPost(
     "/api/orders",
     async (CreateOrderDto order, IHttpClientFactory factory, IPublishEndpoint publisher) =>
