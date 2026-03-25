@@ -33,6 +33,10 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddAuthorization();
 
+//1. Registar el servicio de salud
+// Estamos enseñando a nuestra aplicacion a tomarse el pulso a si misma, para que herramientas externas puedan saber si esta funcionando correctamente o no.
+builder.Services.AddHealthChecks();
+
 var app = builder.Build();
 
 // 3. Pipeline HTTP
@@ -65,5 +69,10 @@ app.MapGet("/api/inventory/{id}", (int id) =>
 .WithName("GetInventory")
 .WithOpenApi()
 .RequireAuthorization();
+
+// 2. Exponer el endpoint de salud
+// Abrimos la "Puerta" en el servidor para que el Gateway (o nosotros) pueda preguntar por la salud.
+app.MapHealthChecks("/health");
+
 
 app.Run();
