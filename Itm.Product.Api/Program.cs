@@ -1,4 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using HealthChecks.UI.Client;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -7,6 +9,7 @@ var builder = WebApplication.CreateBuilder(args);
 // ---------------------------------------------------------
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+builder.Services.AddHealthChecks();
 
 // ARQUITECTURA: Registramos los HttpClientFactory
 // Cliente 1: Inventario
@@ -110,6 +113,13 @@ app.MapGet("/api/products/{id}/summary", async (int id, IHttpClientFactory facto
 })
 .WithName("GetProductSummary")
 .WithOpenApi();
+
+// Endpoint de salud en formato JSON compatible con HealthChecks UI
+app.MapHealthChecks("/health", new HealthCheckOptions
+{
+    Predicate = _ => true,
+    ResponseWriter = UIResponseWriter.WriteHealthCheckUIResponse
+});
 
 app.Run(); // FIN DE LAS INSTRUCCIONES DE NIVEL SUPERIOR
 

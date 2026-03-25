@@ -1,8 +1,11 @@
 using Itm.Price.Api.Dtos; // Asegúrate de que este namespace coincida con donde creaste tu DTO
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using HealthChecks.UI.Client;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+builder.Services.AddHealthChecks();
 
 var app = builder.Build();
 
@@ -32,5 +35,12 @@ app.MapGet("/api/prices/{id}", (int id) =>
 })
 .WithName("GetPriceById") // Nombre claro y específico para la API de Precios
 .WithOpenApi();
+
+// Endpoint de salud en formato JSON compatible con HealthChecks UI
+app.MapHealthChecks("/health", new HealthCheckOptions
+{
+    Predicate = _ => true,
+    ResponseWriter = UIResponseWriter.WriteHealthCheckUIResponse
+});
 
 app.Run();

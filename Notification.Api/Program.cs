@@ -1,12 +1,14 @@
 using MassTransit; // <-- NUEVO IMPORT
 using Itm.Notification.Api.Consumers; // <-- NUEVO IMPORT
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using HealthChecks.UI.Client;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddMassTransit(x =>
 {
-// Registramos nuestro obrero de eventos (consumidor) para que MassTransit sepa a qué eventos debe "despertar" esta aplicación
-x.AddConsumer<OrderCreatedConsumer>(); // <-- REGISTRAMOS EL CONSUMIDOR
+    // Registramos nuestro obrero de eventos (consumidor) para que MassTransit sepa a qué eventos debe "despertar" esta aplicación
+    x.AddConsumer<OrderCreatedConsumer>(); // <-- REGISTRAMOS EL CONSUMIDOR
     x.UsingRabbitMq((context, cfg) =>
     {
         // En un trabajo real, esta URL debe venir de configuración segura (KeyVault / env vars)
@@ -19,8 +21,20 @@ x.AddConsumer<OrderCreatedConsumer>(); // <-- REGISTRAMOS EL CONSUMIDOR
             e.ConfigureConsumer<OrderCreatedConsumer>(context);
         });
     });
-    });
+});
+
+// Registro básico de health checks para que el Gateway pueda monitorear este servicio
+builder.Services.AddHealthChecks();
 
 var app = builder.Build();
+
 app.MapGet("/", () => "Notification.Api esperando mensajes de la nube...");
-app .Run();
+
+// Endpoint de salud en formato JSON compatible con HealthChecks UI
+app.MapHealthChecks("/health", new HealthCheckOptions
+{
+    Predicate = _ => true,
+    ResponseWriter = UIResponseWriter.WriteHealthCheckUIResponse
+});
+
+app.Run();

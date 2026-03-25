@@ -5,7 +5,8 @@ using Itm.Shared.Events; // <-- NUEVO IMPORT
 using Microsoft.AspNetCore.Identity; // <-- NUEVO IMPORT para Identity (si decides usarlo en el futuro)
 using Microsoft.AspNetCore.Diagnostics.HealthChecks; // <-- NUEVO IMPORT para Health Checks
 using Microsoft.Extensions.Diagnostics.HealthChecks; // <-- NUEVO IMPORT para Health Checks
-using System.Text.Json; // <-- NUEVO IMPORT para serialización JSON en Health Checks
+using HealthChecks.UI.Client; // <-- NUEVO IMPORT para respuesta JSON estándar de HealthChecks UI
+using Microsoft.Extensions.Configuration;
 
 
 var builder = WebApplication.CreateBuilder(args);
@@ -30,15 +31,9 @@ builder.Services.AddHttpClient("InventoryClient", client =>
     client.BaseAddress = new Uri("http://localhost:5293");
 });
 
-// 1.  Registar el servicio de salud avanzado (Health Checks Nuevo)
-
-// Le pasamos la URL exaxta de CloudAMQP para que intente conectarse.
-// Usamos la misma MassTransit para asegurar que monitoreamos lo correcto.
-
-string rabbiturl = "amqps://miqffttk:1pscfTN1wGyzJHwe8BTEFMyocp9U-bEp@moose.rmq.cloudamqp.com/miqffttk";
-
+// 1.  Registrar el servicio de salud con un check real contra CloudAMQP
 builder.Services.AddHealthChecks()
-    .AddRabbitMQ(rabbitConnectionString: rabbiturl, name: "CloudAMQP-Broker");
+    .AddCheck<CloudAmqpHealthCheck>("CloudAMQP-Broker");
 
 var app = builder.Build(); // Linea divisoria entre configuración y pipeline
 
@@ -106,26 +101,32 @@ app.MapPost(
         }
     });
 
-// 2. Exponer el endpoint con detalles JSON (Lo Nuevo)
-// Mapeamos las ruta y sobreescribimos  la respuesta por defecto para entregar un JSON estructurado con detalles de salud para que no diga solo Healthy o Unhealthy, sino que entregue información útil para diagnosticar problemas.
- app.MapHealthChecks("/health", new HealthCheckOptions
- {
-     ResponseWriter = async (context, report) =>
-     {
-         context.Response.ContentType = "application/json";
-         var result = JsonSerializer.Serialize(new
-         {
-             status = report.Status.ToString(), // Healthy, Unhealthy o Degraded
-             checks = report.Entries.Select(e => new
-             {
-                 Componente = e.Key,
-                 estado = e.Value.Status.ToString(),
-                 descripcion = e.Value.Description
-             })
-         });
-         await context.Response.WriteAsync(result);
-     }
-
-     });
+// 2. Exponer el endpoint de salud en formato JSON estándar para HealthChecks UI
+app.MapHealthChecks("/health", new HealthCheckOptions
+{
+    Predicate = _ => true,
+    ResponseWriter = UIResponseWriter.WriteHealthCheckUIResponse
+});
 
 app.Run();
+
+// Health check que verifica conectividad TCP básica contra el broker de CloudAMQP
+internal sealed class CloudAmqpHealthCheck : IHealthCheck
+{
+    private const string AmqpUrl = "amqps://miqffttk:1pscfTN1wGyzJHwe8BTEFMyocp9U-bEp@moose.rmq.cloudamqp.com/miqffttk";
+
+    public async Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var uri = new Uri(AmqpUrl);
+            using var client = new System.Net.Sockets.TcpClient();
+            await client.ConnectAsync(uri.Host, uri.Port > 0 ? uri.Port : 5671, cancellationToken);
+            return HealthCheckResult.Healthy("CloudAMQP reachable");
+        }
+        catch (Exception ex)
+        {
+            return HealthCheckResult.Unhealthy("CloudAMQP unreachable", ex);
+        }
+    }
+}

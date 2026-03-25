@@ -1,6 +1,8 @@
 using Itm.Inventory.Api.Dtos;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.IdentityModel.Tokens;
+using HealthChecks.UI.Client;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -70,9 +72,13 @@ app.MapGet("/api/inventory/{id}", (int id) =>
 .WithOpenApi()
 .RequireAuthorization();
 
-// 2. Exponer el endpoint de salud
+// 2. Exponer el endpoint de salud en formato JSON compatible con HealthChecks UI
 // Abrimos la "Puerta" en el servidor para que el Gateway (o nosotros) pueda preguntar por la salud.
-app.MapHealthChecks("/health");
+app.MapHealthChecks("/health", new HealthCheckOptions
+{
+    Predicate = _ => true,
+    ResponseWriter = UIResponseWriter.WriteHealthCheckUIResponse
+});
 
 
 app.Run();
