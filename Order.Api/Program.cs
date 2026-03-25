@@ -2,7 +2,11 @@ using Order.Api;
 using System.Net.Http.Json;
 using MassTransit; // <-- NUEVO IMPORT 
 using Itm.Shared.Events; // <-- NUEVO IMPORT
-using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity; // <-- NUEVO IMPORT para Identity (si decides usarlo en el futuro)
+using Microsoft.AspNetCore.Diagnostics.HealthChecks; // <-- NUEVO IMPORT para Health Checks
+using Microsoft.Extensions.Diagnostics.HealthChecks; // <-- NUEVO IMPORT para Health Checks
+using System.Text.Json; // <-- NUEVO IMPORT para serialización JSON en Health Checks
+
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -26,7 +30,17 @@ builder.Services.AddHttpClient("InventoryClient", client =>
     client.BaseAddress = new Uri("http://localhost:5293");
 });
 
-var app = builder.Build();
+// 1.  Registar el servicio de salud avanzado (Health Checks Nuevo)
+
+// Le pasamos la URL exaxta de CloudAMQP para que intente conectarse.
+// Usamos la misma MassTransit para asegurar que monitoreamos lo correcto.
+
+string rabbiturl = "amqps://miqffttk:1pscfTN1wGyzJHwe8BTEFMyocp9U-bEp@moose.rmq.cloudamqp.com/miqffttk";
+
+builder.Services.AddHealthChecks()
+    .AddRabbitMQ(rabbitConnectionString: rabbiturl, name: "CloudAMQP-Broker");
+
+var app = builder.Build(); // Linea divisoria entre configuración y pipeline
 
 if (app.Environment.IsDevelopment())
 {
@@ -91,5 +105,27 @@ app.MapPost(
             return Results.Problem("Error crítico del sistema. Contacte soporte.");
         }
     });
+
+// 2. Exponer el endpoint con detalles JSON (Lo Nuevo)
+// Mapeamos las ruta y sobreescribimos  la respuesta por defecto para entregar un JSON estructurado con detalles de salud para que no diga solo Healthy o Unhealthy, sino que entregue información útil para diagnosticar problemas.
+ app.MapHealthChecks("/health", new HealthCheckOptions
+ {
+     ResponseWriter = async (context, report) =>
+     {
+         context.Response.ContentType = "application/json";
+         var result = JsonSerializer.Serialize(new
+         {
+             status = report.Status.ToString(), // Healthy, Unhealthy o Degraded
+             checks = report.Entries.Select(e => new
+             {
+                 Componente = e.Key,
+                 estado = e.Value.Status.ToString(),
+                 descripcion = e.Value.Description
+             })
+         });
+         await context.Response.WriteAsync(result);
+     }
+
+     });
 
 app.Run();

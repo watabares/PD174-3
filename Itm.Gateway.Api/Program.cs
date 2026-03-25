@@ -5,10 +5,29 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddReverseProxy()
     .LoadFromConfig(builder.Configuration.GetSection("ReverseProxy"));
 
+// Configuramos el Dashboard de salud para monitorear el estado de los servicios backend
+builder.Services.AddHealthChecksUI(setupSettings: setup =>
+{
+    // Aquí matriculamos los pacientes, es decir, los endpoints de salud de cada servicio que queremos monitorear
+    setup.AddHealthCheckEndpoint("Inventory API", "http://localhost:5001/health");
+    setup.AddHealthCheckEndpoint("Orders API (con CloudAMQP)", "http://localhost:5002/health");
+    setup.AddHealthCheckEndpoint("Prices API", "http://localhost:5003/health");
+    setup.AddHealthCheckEndpoint("Notifications API", "http://localhost:5004/health");
+    })
+    .AddInMemoryStorage(); // Guarda el histórico de salud en memoria (no recomendado para producción, pero suficiente para este ejemplo)
+
+
 var app = builder.Build();
 
 // 2. Activamos el middleware de YARP para que procese las solicitudes entrantes
 
-app.MapReverseProxy();
+app.MapReverseProxy();// Activamos el enrrutador de YARP para que procese las solicitudes entrantes y las dirija a los servicios backend según la configuración
+
+// Activar el panel gráfico de salud en la ruta /health-ui
+
+app.MapHealthChecksUI(options =>
+{
+    options.UIPath = "/monitor"; // La URL donde estará disponible el dashboard de salud
+});
 
 app.Run();
