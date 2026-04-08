@@ -1,15 +1,16 @@
 # ITM Distributed System - Microservicios de Ejemplo
 
-Sistema distribuido de ejemplo para el curso de Arquitectura de Software (Clases 1 a 6).
+Sistema distribuido de ejemplo para el curso de Arquitectura de Software (Clases 1 a 7).
 
-Este proyecto muestra cómo pasar de un monolito a una arquitectura de microservicios usando .NET 8 y Minimal APIs:
+Este proyecto muestra cómo pasar de un monolito a una arquitectura de microservicios usando .NET 8, Minimal APIs y un cliente móvil .NET MAUI (.NET 9):
 
 - `Itm.Inventory.Api` – Servicio de Inventario (dueño del stock, protegido con JWT).
 - `Itm.Price.Api` – Servicio de Precios (dueño del dinero).
 - `Itm.Product.Api` – Orquestador / BFF que compone información de Inventario y Precios.
-- `Order.Api` – Servicio de Órdenes que primero actúa como orquestador clásico (Clase 3) y luego implementa una SAGA orquestada (Clase 4).
-- `Itm.Gateway.Api` – API Gateway basado en YARP que expone solo las rutas necesarias hacia los microservicios internos.
-- `Notification.Api` – Servicio de notificaciones que en las clases siguientes actuará como consumidor de eventos de dominio (por ejemplo, `OrderCreatedEvent`) publicado por Order.Api a través de RabbitMQ/MassTransit.
+- `Order.Api` – Servicio de Órdenes que primero actúa como orquestador clásico (Clase 3) y luego implementa una SAGA orquestada (Clase 4) y publica eventos de dominio.
+- `Itm.Gateway.Api` – API Gateway basado en YARP que expone solo las rutas necesarias hacia los microservicios internos y centraliza la seguridad de entrada.
+- `Notification.Api` – Servicio de notificaciones que actúa como consumidor de eventos de dominio (por ejemplo, `OrderCreatedEvent`) publicados por `Order.Api` a través de RabbitMQ/MassTransit.
+- `Itm.Store.Mobile` – App móvil .NET MAUI (.NET 9) que consume el ecosistema a través del Gateway, usando JWT almacenado en `SecureStorage` y un `AuthHandler` para enviar llamadas seguras.
 
 ---
 
@@ -169,9 +170,20 @@ En la Clase 6 se introduce un **Message Broker (RabbitMQ)** usando **CloudAMQP**
 
 Esta clase consolida el paso de integración síncrona (HTTP) a mensajería asíncrona, mejorando resiliencia, escalabilidad y experiencia de usuario.
 
+### 2.7. Clase 7 - Cliente móvil seguro con .NET MAUI y JWT
+
+Se añade el cliente móvil:
+
+- Se crea `Itm.Store.Mobile` como app móvil .NET MAUI (.NET 9).
+- Se configura un `HttpClient` llamado `GatewayClient` apuntando a `Itm.Gateway.Api` (10.0.2.2:5110 en emulador Android).
+- Se implementa un `AuthHandler` que lee un JWT desde `SecureStorage` y lo envía como `Authorization: Bearer ...` en cada petición.
+- El flujo completo es: **Móvil → Gateway → Product.Api → Inventory.Api**.
+  - Sin iniciar sesión: la llamada al Gateway termina en `401 Unauthorized` al llegar a `Inventory.Api`.
+  - Tras "Iniciar Sesión": se guarda un JWT válido y la misma ruta retorna `200 OK` con el JSON del stock.
+
 ---
 
-## 3. Clases 1–6 resumidas
+## 3. Clases 1–7 resumidas
 
 ### Clase 1–2: Fundamentos, BFF y paralelismo
 
@@ -182,46 +194,35 @@ Esta clase consolida el paso de integración síncrona (HTTP) a mensajería así
 
 ### Clase 3: Mutación de estado e integración inicial (Order.Api)
 
-Escenario: "Venta fantasma" – el sistema solo lee stock y precio, pero no puede vender (no hay POST ni mutación).
-
 - Se introduce `POST` en `Itm.Inventory.Api` para **mutar estado** (`/reduce`).
-- Se valida negocio: no vender si no hay stock suficiente.
-- Se crea `Order.Api` como **orquestador**:
-  - Verifica stock en `Inventory`.
-  - Obtiene precio en `Price`.
-  - Calcula total y devuelve un resumen/factura de la orden.
-
-Conceptos:
-
-- GET es seguro / idempotente; POST tiene efectos secundarios.
-- Validación de negocio antes de mutar (no stock negativo).
-- Composición de respuestas de múltiples servicios en una sola factura de orden.
+- `Order.Api` orquesta stock y precio para generar una orden/factura.
 
 ### Clase 4: Transacciones distribuidas y SAGA
 
-Escenario: "Pedido fantasma" – pago fallido con stock ya descontado.
-
-- Problema: no hay ROLLBACK global en microservicios.
-- Solución: **Patrón SAGA Orquestada** con acciones compensatorias.
-- `Order.Api` orquesta; `Inventory.Api` implementa `reduce` + `release`.
+- Problema: pago fallido con stock ya descontado.
+- Solución: **Patrón SAGA Orquestada** con acciones compensatorias (`reduce` + `release`).
 
 ### Clase 5: API Gateway y seguridad con JWT
 
-Escenario: exposición directa de microservicios y riesgo de ataques por "puerta trasera".
-
 - Se introduce `Itm.Gateway.Api` como API Gateway con YARP.
 - Se protege `Itm.Inventory.Api` con JWT.
-- Se refuerza la defensa en profundidad: Gateway + microservicios seguros.
+- Defensa en profundidad: Gateway + microservicios seguros.
 
 ### Clase 6: Arquitectura Orientada a Eventos (EDA) y Mensajería Asíncrona
 
-En la Clase 6 se introduce un **Message Broker (RabbitMQ)** usando **CloudAMQP** (PaaS) para evitar instalaciones locales y habilitar una arquitectura **event-driven**:
-
-- Se provisiona un clúster gratuito en CloudAMQP y se usa la **AMQP URL** en los servicios.
+- Se introduce un **Message Broker (RabbitMQ)** usando **CloudAMQP**.
 - Se crea la librería compartida `Itm.Shared.Events` con el evento inmutable `OrderCreatedEvent`.
-- `Order.Api` se convierte en **productor** usando **MassTransit.RabbitMQ**, publica `OrderCreatedEvent` a RabbitMQ tras completar la SAGA.
-- Se agrega `Notification.Api` como **consumidor**, con un `OrderCreatedConsumer` que procesa `OrderCreatedEvent` y simula el envío de correos.
-- Se demuestra desacoplamiento temporal: las órdenes se completan aunque `Notification.Api` esté caído, los mensajes quedan retenidos en la cola y se procesan al reactivar el servicio.
+- `Order.Api` publica `OrderCreatedEvent` a RabbitMQ mediante MassTransit.
+- `Notification.Api` consume `OrderCreatedEvent` y simula el envío de correos.
+
+### Clase 7: Cliente móvil seguro con .NET MAUI y JWT
+
+- Se crea `Itm.Store.Mobile` como app móvil .NET MAUI (.NET 9).
+- Se configura un `HttpClient` llamado `GatewayClient` apuntando a `Itm.Gateway.Api` (10.0.2.2:5110 en emulador Android).
+- Se implementa un `AuthHandler` que lee un JWT desde `SecureStorage` y lo envía como `Authorization: Bearer ...` en cada petición.
+- El flujo completo es: **Móvil → Gateway → Product.Api → Inventory.Api**.
+  - Sin iniciar sesión: la llamada al Gateway termina en `401 Unauthorized` al llegar a `Inventory.Api`.
+  - Tras "Iniciar Sesión": se guarda un JWT válido y la misma ruta retorna `200 OK` con el JSON del stock.
 
 ---
 
@@ -236,10 +237,11 @@ En la Clase 6 se introduce un **Message Broker (RabbitMQ)** usando **CloudAMQP**
 El sistema demuestra:
 
 - **Desacoplamiento** entre dominios y contratos claros vía DTOs.
-- **Orquestación sincronizada** (BFF y Order.Api).
+- **Orquestación sincronizada** (BFF y `Order.Api`).
 - **Mutación de estado controlada** con validaciones de negocio.
 - **Consistencia eventual** mediante SAGA con acciones compensatorias.
 - **Defensa en profundidad** con API Gateway (YARP) y JWT.
 - **Arquitectura orientada a eventos** con RabbitMQ, MassTransit y colas de mensajes.
+- **Cliente móvil seguro** con .NET MAUI, JWT y `SecureStorage` para integrar front móvil con backend distribuido.
 
 En un entorno productivo se añadirían colas de mensajes para hacer SAGA asíncrona y mejorar resiliencia frente a fallos intermedios.
