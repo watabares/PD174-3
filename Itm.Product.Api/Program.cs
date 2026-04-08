@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using HealthChecks.UI.Client;
+using Microsoft.AspNetCore.Http;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -45,11 +46,26 @@ app.UseHttpsRedirection();
 // ---------------------------------------------------------
 
 // Endpoint Anterior: Consulta simple (Solo inventario)
-app.MapGet("/api/products/{id}/check-stock", async (int id, IHttpClientFactory clientFactory) =>
+app.MapGet("/api/products/{id}/check-stock", async (int id, IHttpClientFactory clientFactory, HttpContext httpContext) =>
 {
+ // Propagamos el Authorization header recibido (JWT) hacia Inventory.Api
+    if (httpContext.Request.Headers.TryGetValue("Authorization", out var authHeader))
+    {
+        // Guardamos el token en el HttpContext.Items para que pueda ser reutilizado si en el futuro
+        // agregamos un DelegatingHandler. Por ahora lo usamos directamente en el cliente.
+        // (Decisión simple para este laboratorio.)
+    }
+
     var client = clientFactory.CreateClient("InventoryClient");
     try
     {
+       // Copiamos el Authorization header si existe, para que Inventory valide el mismo JWT
+        if (httpContext.Request.Headers.TryGetValue("Authorization", out var auth))
+        {
+            client.DefaultRequestHeaders.Remove("Authorization");
+            client.DefaultRequestHeaders.Add("Authorization", (IEnumerable<string>)auth);
+        }
+
         var response = await client.GetAsync($"/api/inventory/{id}");
         if (response.IsSuccessStatusCode)
         {
