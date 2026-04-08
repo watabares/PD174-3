@@ -35,6 +35,9 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddAuthorization();
 
+// Agregamos el Accessor para poder leer las cabeceras
+builder.Services.AddHttpContextAccessor();
+
 //1. Registar el servicio de salud
 // Estamos enseñando a nuestra aplicacion a tomarse el pulso a si misma, para que herramientas externas puedan saber si esta funcionando correctamente o no.
 builder.Services.AddHealthChecks();
@@ -63,10 +66,19 @@ var inventoryDb = new List<InventoryItemDto>
 };
 
 // 5. Endpoint protegido
-app.MapGet("/api/inventory/{id}", (int id) =>
+app.MapGet("/api/inventory/{id}", (int id, HttpContext httpContext, ILogger<Program> logger) =>
 {
-    var item = inventoryDb.FirstOrDefault(p => p.ProductId == id);
-    return item is not null ? Results.Ok(item) : Results.NotFound();
+    // 1. Extraemos el Correlation ID
+    var correlationId = httpContext.Request.Headers["X-Correlation-ID"].FirstOrDefault() ?? "SIN-ID";
+
+    // 2. Sellamos el log con el pasaporte
+    using (logger.BeginScope(new Dictionary<string, object> { ["CorrelationId"] = correlationId }))
+    {
+        logger.LogInformation("Consultando inventario en BD para el producto {ProductId}", id);
+
+        var item = inventoryDb.FirstOrDefault(p => p.ProductId == id);
+        return item is not null ? Results.Ok(item) : Results.NotFound();
+    }
 })
 .WithName("GetInventory")
 .WithOpenApi()

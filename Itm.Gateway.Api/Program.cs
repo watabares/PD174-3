@@ -1,3 +1,5 @@
+using Itm.Gateway.Api.Middlewares;
+
 var builder = WebApplication.CreateBuilder(args);
 
 //1. Agregamos YARP a la caja de herramientas (Dependency Injection)
@@ -21,8 +23,10 @@ builder.Services.AddHealthChecksUI(setupSettings: setup =>
 
 var app = builder.Build();
 
-// 2. Activamos el middleware de YARP para que procese las solicitudes entrantes
+// 2. Activamos el middleware de Correlation ID antes del proxy inverso
+app.UseMiddleware<CorrelationIdMiddleware>();
 
+// 3. Activamos el middleware de YARP para que procese las solicitudes entrantes
 app.MapReverseProxy();// Activamos el enrrutador de YARP para que procese las solicitudes entrantes y las dirija a los servicios backend según la configuración
 
 // Activar el panel gráfico de salud en la ruta /health-ui

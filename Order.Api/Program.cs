@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.Identity; // <-- NUEVO IMPORT para Identity (si decid
 using Microsoft.AspNetCore.Diagnostics.HealthChecks; // <-- NUEVO IMPORT para Health Checks
 using Microsoft.Extensions.Diagnostics.HealthChecks; // <-- NUEVO IMPORT para Health Checks
 using HealthChecks.UI.Client; // <-- NUEVO IMPORT para respuesta JSON estándar de HealthChecks UI
-using Microsoft.Extensions.Configuration;
+using Itm.Order.Api.Handlers;
 
 
 var builder = WebApplication.CreateBuilder(args);
@@ -14,6 +14,8 @@ var builder = WebApplication.CreateBuilder(args);
 // Servicios básicos y Swagger
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddTransient<CorrelationIdDelegatingHandler>();
 
 // CONFIGURACIÓN DEL PRODUCTOR (MassTransit)
 builder.Services.AddMassTransit(x =>
@@ -29,7 +31,9 @@ builder.Services.AddMassTransit(x =>
 builder.Services.AddHttpClient("InventoryClient", client =>
 {
     client.BaseAddress = new Uri("http://localhost:5293");
-});
+})
+    // Propagamos el X-Correlation-ID hacia Inventory.Api
+    .AddHttpMessageHandler<CorrelationIdDelegatingHandler>();
 
 // 1.  Registrar el servicio de salud con un check real contra CloudAMQP
 builder.Services.AddHealthChecks()
@@ -43,11 +47,17 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-//  Agregamos IPublishEndpoint a los parámetros
+//  Agregamos IPublishEndpoint y acceso a HttpContext/ILogger a los parámetros
 app.MapPost(
     "/api/orders",
-    async (CreateOrderDto order, IHttpClientFactory factory, IPublishEndpoint publisher) =>
+    async (CreateOrderDto order, IHttpClientFactory factory, IPublishEndpoint publisher, HttpContext httpContext, ILogger<Program> logger) =>
     {
+        // Extraemos el Correlation ID que viene desde el Gateway o lo marcamos como SIN-ID
+        var correlationId = httpContext.Request.Headers["X-Correlation-ID"].FirstOrDefault() ?? "SIN-ID";
+
+        using var scope = logger.BeginScope(new Dictionary<string, object> { ["CorrelationId"] = correlationId });
+        logger.LogInformation("Iniciando procesamiento de la orden para el producto {ProductId}", order.ProductId);
+
         var invClient = factory.CreateClient("InventoryClient");
 
         // Paso 1: Intentar reservar el stock
@@ -55,6 +65,7 @@ app.MapPost(
 
         if (!reduceResponse.IsSuccessStatusCode)
         {
+            logger.LogWarning("No se pudo reservar el stock para el producto {ProductId}. StatusCode: {StatusCode}", order.ProductId, reduceResponse.StatusCode);
             return Results.BadRequest("No se pudo reservar el stock. Transacción abortada.");
         }
 
@@ -81,13 +92,13 @@ app.MapPost(
             // La tiramos al buzón de RabbitMQ en la nube
             await publisher.Publish(orderEvent);
 
-            Console.WriteLine($"[BROKER] Evento publicado en CloudAMQP para la orden {newOrderId}");
+            logger.LogInformation("Evento publicado en RabbitMQ. Orden {OrderId} completada.", newOrderId);
 
-            return Results.Ok(new { Status = "Orden procesada rápido", OrderId = newOrderId });
+            return Results.Ok(new { Status = "Orden procesada rápido", OrderId = newOrderId, CorrelationId = correlationId });
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[ERROR] Falló el pago: {ex.Message}. Iniciando compensación de stock...");
+            logger.LogError(ex, "Falló el pago para el producto {ProductId}. Iniciando compensación de stock...", order.ProductId);
 
             // INCIO DE LA COMPENSACIÓN (SAGA ROLLBACK)
             var compensateResponse = await invClient.PostAsJsonAsync("/api/inventory/release", order);
@@ -96,7 +107,7 @@ app.MapPost(
                 return Results.Problem("El pago falló. El sttock due devuelto correctamente. Intente de nuevo.");
             }
 
-            Console.WriteLine("[CRITICAL] Falló la compensación. Datos inconsistentes.");
+            logger.LogCritical("Falló la compensación. Datos inconsistentes para el producto {ProductId}.", order.ProductId);
             return Results.Problem("Error crítico del sistema. Contacte soporte.");
         }
     });
