@@ -1,16 +1,66 @@
-﻿namespace Itm.Store.Mobile;
+﻿using System.Net.Http;
+using Microsoft.AspNetCore.SignalR.Client; // Cliente de SignalR para conectarnos al Hub desde la App Móvil
+using Microsoft.Maui.ApplicationModel; // MainThread
+using Microsoft.Maui.Storage; // SecureStorage
+using Microsoft.Maui.Graphics; // Colors
+using Microsoft.Maui.Controls; // ContentPage, UI controls
+
+namespace Itm.Store.Mobile;
 
 public partial class MainPage : ContentPage
 {
     private readonly IHttpClientFactory _httpClientFactory;
+    private HubConnection? _hubConnection; // Conexión al Hub de SignalR (nullable hasta que InitializeSignalR la cree)
 
     // Inyectamos la fábrica, tal como lo hacemos en el Backend
     public MainPage(IHttpClientFactory httpClientFactory)
     {
         InitializeComponent();
         _httpClientFactory = httpClientFactory;
+
+        // Inicializamos la conexión al Hub de SignalR
+        InitializeSignalR();
     }
 
+    private async void InitializeSignalR()
+    {
+        // 1. Configuramos el tubo hacia el Gateway (El Gateway lo pasará al Notification.Api)
+        // OJO: Recuerden usar usar 10.0.2.2:5000 en Android y localhost:5000 en iOS, porque el emulador de Android no puede usar localhost para referirse a la máquina host, debe usar esta IP especial.
+        _hubConnection = new HubConnectionBuilder()
+            .WithUrl("http://10.0.2.2:5000/hubs/notifications") // URL del Hub de SignalR
+            .WithAutomaticReconnect() // Resilencia: si se cael Wifi, el va a tratar de reconectar solo. Habilitamos la reconexión automática en caso de pérdida de conexión
+            .Build();
+
+        // 2. Le decimos al Hub: "Cuando llegue un mensaje del servidor con el nombre 'TicketReady', haz esto"
+
+        _hubConnection.On<string>("TicketReady", (mensajeDelServidor) =>
+        {
+            // Esta función se ejecuta cada vez que el servidor envía un mensaje "TickerReady"
+            // El mensaje es el string que el servidor envió (Ej: "¡Tu boleta para el producto X ha sido confrimada!")
+            MainThread.BeginInvokeOnMainThread(() =>
+            {
+                // Actualizamos la UI con el mensaje recibido del servidor
+                ResultLabel.Text = $" ALERTA EN VIVO: {mensajeDelServidor}";
+                ResultLabel.TextColor = Colors.Purple;
+            });
+        });
+
+        // 3.  Encendemos el radio para empezar a escuchar mensajes del servidor
+
+        try
+
+        {
+            await _hubConnection.StartAsync();
+
+        }
+        catch (Exception ex)
+
+        {
+            Console.WriteLine($"Error al conectar con el Hub de SignalR: {ex.Message}");
+        }
+    }
+
+         
     private async void OnLoginClicked(object sender, EventArgs e)
     {
         // Simulamos que fuimos a un servidor de Identidad (IdentityServer / Auth0)

@@ -1,6 +1,8 @@
 ﻿using MassTransit; // <-- NUEVO IMPORT
 using Itm.Shared.Events; // <-- NUEVO IMPORT
 using Microsoft.Extensions.Logging;
+using Microsoft.AspNetCore.SignalR;
+using Itm.Notification.Api.Hubs; // <-- NUEVO IMPORT: Referencia a la carpeta donde está nuestro Hub de SignalR
 
 namespace Itm.Notification.Api.Consumers;
 
@@ -8,24 +10,29 @@ namespace Itm.Notification.Api.Consumers;
 public class OrderCreatedConsumer : IConsumer<OrderCreatedEvent>
 {
     private readonly ILogger<OrderCreatedConsumer> _logger;
+    private readonly IHubContext<NotificationHub> _hubContext; // Inyectamos el Hub <-- NUEVO CAMPO: Contexto de SignalR para enviar notificaciones en tiempo real
 
-    public OrderCreatedConsumer(ILogger<OrderCreatedConsumer> logger)
+    public OrderCreatedConsumer(ILogger<OrderCreatedConsumer> logger, IHubContext<NotificationHub> hubContext)
     {
         _logger = logger;
+        _hubContext = hubContext;
     }
 
     public async Task Consume(ConsumeContext<OrderCreatedEvent> context)
     {
-        // MassTransit propaga automáticamente el CorrelationId en el contexto del mensaje
-        var correlationId = context.CorrelationId?.ToString() ?? "SIN-ID";
+        _logger.LogInformation("Procesando evento de RabbitMQ para orden: {OrderId}", context.Message.OrderId);
 
-        using var scope = _logger.BeginScope(new Dictionary<string, object> { ["CorrelationId"] = correlationId });
+        // Simulamos tiempo de procesamiento pesado (generación de PDF, pago , etc.)
+        await Task.Delay(3000);
 
-        var data = context.Message; // Abrimos la "caja" con los datos del evento
+        // Magia en tiempo real
+        // Le decimos al HUB: "Mandale a todos los clientes conectados un evento llamdo ´TickerReady´ "
 
-        _logger.LogInformation("Procesando recibo de compra para la orden {OrderId} y usuario {UserEmail}", data.OrderId, data.UserEmail);
-        // Simulamos la lentitud de un servidor de correos real (4 segundos)
-        await Task.Delay(4000);
-        _logger.LogInformation("Correo enviado exitosamente a {UserEmail}", data.UserEmail);
-    }
+        var message = $"¡Tu boleta para el producto {context.Message.ProductId} ha sido confrimada!";
+
+        await _hubContext.Clients.All.SendAsync("TickerReady", message);
+
+        _logger.LogInformation("Notificación push enviada via SignalR");
 }
+}
+
