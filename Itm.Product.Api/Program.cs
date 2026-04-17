@@ -118,12 +118,12 @@ app.MapGet("/api/products/{id}", async (int id, IHttpClientFactory factory, IDis
     var cachedData = await cache.GetStringAsync(cacheKey);
     if (!string.IsNullOrEmpty(cachedData))
     {
-        logger.LogInformation("🚀 Cache hit: Devolviendo datos desde Redis.");
+        logger.LogInformation(" Cache hit: Devolviendo datos desde Redis.");
         var resultFromCache = JsonSerializer.Deserialize<object>(cachedData);
         return Results.Ok(resultFromCache);
     }
 
-    logger.LogWarning("🐢 Cache miss: Yendo a la base de datos (Price.Api)");
+    logger.LogWarning(" Cache miss: Yendo a la base de datos (Price.Api)");
 
     // 2. Si no hay caché, vamos al microservicio
     var client = factory.CreateClient("PriceClient");
