@@ -1,0 +1,148 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build-backend",
+      "type": "shell",
+      "command": "dotnet build Itm.Distributed.System.sln",
+      "group": "build",
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "run-inventory",
+      "type": "shell",
+      "command": "dotnet run --project Itm.Inventory.Api",
+      "isBackground": true,
+      "problemMatcher": {
+        "pattern": { "regexp": "^$" },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "^.*Building\\.\\.\\.",
+          "endsPattern": "^.*Now listening on.*"
+        }
+      }
+    },
+    {
+      "label": "run-price",
+      "type": "shell",
+      "command": "dotnet run --project Itm.Price.Api",
+      "isBackground": true,
+      "problemMatcher": {
+        "pattern": { "regexp": "^$" },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "^.*Building\\.\\.\\.",
+          "endsPattern": "^.*Now listening on.*"
+        }
+      }
+    },
+    {
+      "label": "run-product",
+      "type": "shell",
+      "command": "dotnet run --project Itm.Product.Api",
+      "isBackground": true,
+      "problemMatcher": {
+        "pattern": { "regexp": "^$" },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "^.*Building\\.\\.\\.",
+          "endsPattern": "^.*Now listening on.*"
+        }
+      }
+    },
+    {
+      "label": "run-order",
+      "type": "shell",
+      "command": "dotnet run --project Order.Api",
+      "isBackground": true,
+      "problemMatcher": {
+        "pattern": { "regexp": "^$" },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "^.*Building\\.\\.\\.",
+          "endsPattern": "^.*Now listening on.*"
+        }
+      }
+    },
+    {
+      "label": "run-notification",
+      "type": "shell",
+      "command": "dotnet run --project Notification.Api",
+      "isBackground": true,
+      "problemMatcher": {
+        "pattern": { "regexp": "^$" },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "^.*Building\\.\\.\\.",
+          "endsPattern": "^.*Now listening on.*"
+        }
+      }
+    },
+    {
+      "label": "run-gateway",
+      "type": "shell",
+      "command": "dotnet run --project Itm.Gateway.Api",
+      "isBackground": true,
+      "problemMatcher": {
+        "pattern": { "regexp": "^$" },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "^.*Building\\.\\.\\.",
+          "endsPattern": "^.*Now listening on.*"
+        }
+      }
+    },
+    {
+      "label": "start-emulator",
+      "type": "shell",
+      "command": "set \"ANDROID_HOME=${env:LOCALAPPDATA}\\Android\\Sdk\" && \"${env:LOCALAPPDATA}\\Android\\Sdk\\emulator\\emulator.exe\" -avd Pixel_5_API_34 -no-snapshot-load",
+      "isBackground": true,
+      "problemMatcher": {
+        "pattern": { "regexp": "^$" },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "^.*emulator.*",
+          "endsPattern": "^.*boot completed.*"
+        }
+      }
+    },
+    {
+      "label": "deploy-maui",
+      "type": "shell",
+      "command": "set \"PATH=${env:USERPROFILE}\\.dotnet;%PATH%\" && set \"DOTNET_ROOT=${env:USERPROFILE}\\.dotnet\" && set \"JAVA_HOME=${env:USERPROFILE}\\.jdk\\jdk-17.0.15+6\" && set \"ANDROID_HOME=${env:LOCALAPPDATA}\\Android\\Sdk\" && \"${env:USERPROFILE}\\.dotnet\\dotnet.exe\" build Itm.Store.Mobile\\Itm.Store.Mobile.csproj -t:Run -f net9.0-android",
+      "isBackground": true,
+      "problemMatcher": {
+        "pattern": { "regexp": "^$" },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "^.*Building\\.\\.\\.",
+          "endsPattern": "^.*Build succeeded.*"
+        }
+      }
+    },
+    {
+      "label": "🚀 Backend (Clase 7: Gateway + Product + Inventory)",
+      "dependsOn": ["run-inventory", "run-price", "run-product", "run-gateway"],
+      "dependsOrder": "parallel",
+      "problemMatcher": []
+    },
+    {
+      "label": "🚀 Backend Completo (Todos los servicios)",
+      "dependsOn": ["run-inventory", "run-price", "run-product", "run-order", "run-notification", "run-gateway"],
+      "dependsOrder": "parallel",
+      "problemMatcher": []
+    },
+    {
+      "label": "📱 Clase 7 Completa (Backend + Emulador + App)",
+      "type": "shell",
+      "command": "start-clase7.cmd",
+      "problemMatcher": []
+    },
+    {
+      "label": "⏹️ Detener Todo",
+      "type": "shell",
+      "command": "stop-all.cmd",
+      "problemMatcher": []
+    }
+  ]
+}

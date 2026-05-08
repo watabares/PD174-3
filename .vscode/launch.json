@@ -1,0 +1,53 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Inventory.Api",
+      "type": "dotnet",
+      "request": "launch",
+      "projectPath": "${workspaceFolder}/Itm.Inventory.Api/Itm.Inventory.Api.csproj"
+    },
+    {
+      "name": "Price.Api",
+      "type": "dotnet",
+      "request": "launch",
+      "projectPath": "${workspaceFolder}/Itm.Price.Api/Itm.Price.Api.csproj"
+    },
+    {
+      "name": "Product.Api",
+      "type": "dotnet",
+      "request": "launch",
+      "projectPath": "${workspaceFolder}/Itm.Product.Api/Itm.Product.Api.csproj"
+    },
+    {
+      "name": "Gateway.Api",
+      "type": "dotnet",
+      "request": "launch",
+      "projectPath": "${workspaceFolder}/Itm.Gateway.Api/Itm.Gateway.Api.csproj"
+    },
+    {
+      "name": "Order.Api",
+      "type": "dotnet",
+      "request": "launch",
+      "projectPath": "${workspaceFolder}/Order.Api/Order.Api.csproj"
+    },
+    {
+      "name": "Notification.Api",
+      "type": "dotnet",
+      "request": "launch",
+      "projectPath": "${workspaceFolder}/Notification.Api/Itm.Notification.Api.csproj"
+    }
+  ],
+  "compounds": [
+    {
+      "name": "🚀 Clase 7: Gateway + Product + Inventory (Prueba Móvil)",
+      "configurations": ["Gateway.Api", "Product.Api", "Inventory.Api"],
+      "stopAll": true
+    },
+    {
+      "name": "🚀 Todos los Microservicios",
+      "configurations": ["Gateway.Api", "Product.Api", "Inventory.Api", "Price.Api", "Order.Api", "Notification.Api"],
+      "stopAll": true
+    }
+  ]
+}
