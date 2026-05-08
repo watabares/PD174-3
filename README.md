@@ -14,6 +14,30 @@ Este proyecto muestra cómo pasar de un monolito a una arquitectura de microserv
 
 ---
 
+## 🔐 Configuración de Secretos en GitHub (CI/CD)
+
+Para que el pipeline de GitHub Actions pueda desplegar las imágenes correctamente (Clase 14), debes configurar tus credenciales de Docker Hub en el repositorio. ¡Nunca guardes contraseñas en el código fuente!
+
+Sigue este paso a paso para agregar tus secretos en GitHub:
+
+1. Ve a tu repositorio en GitHub desde el navegador.
+2. Haz clic en la pestaña **Settings ⚙️** (Configuración).
+3. En el menú de la izquierda, baja hasta la sección **Security**, haz clic en **Secrets and variables** y luego en **Actions**.
+4. Haz clic en el botón verde **New repository secret**.
+5. Crea el primer secreto para tu usuario:
+   - **Name:** `DOCKER_USERNAME`
+   - **Secret:** Escribe tu usuario de Docker Hub (Ej. *juanperez*).
+   - Haz clic en **Add secret**.
+6. Haz clic nuevamente en **New repository secret** para la contraseña.
+7. Crea el segundo secreto:
+   - **Name:** `DOCKER_PASSWORD`
+   - **Secret:** Pega tu contraseña o *Access Token* de Docker Hub.
+   - Haz clic en **Add secret**.
+
+Una vez guardados, verás ambos listados en la pestaña Actions. Cuando hagas tu próximo `git push`, el archivo `.github/workflows/deploy-order-api.yml` leerá estos secretos automáticamente y podrá construir la imagen en la nube.
+
+---
+
 ## 1. Requisitos
 
 - Visual Studio 2022 o superior (carga de trabajo "Desarrollo ASP.NET y Web").
