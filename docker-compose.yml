@@ -1,0 +1,65 @@
+version: '3.8'
+
+networks:
+  itm-network:
+    driver: bridge
+
+services:
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: itm-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    networks:
+      - itm-network
+
+  redis:
+    image: redis:alpine
+    container_name: itm-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - itm-network
+
+  inventory-api:
+    image: itm-inventory-api
+    build:
+      context: .
+      dockerfile: Itm.Inventory.Api/Dockerfile
+    container_name: itm-inventory-api
+    ports:
+      - "5002:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+    networks:
+      - itm-network
+
+  order-api:
+    image: itm-order-api
+    build:
+      context: .
+      dockerfile: Order.Api/Dockerfile
+    container_name: itm-order-api
+    ports:
+      - "5004:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - InventoryApiUrl=http://inventory-api:8080
+      - RabbitMq__Host=amqp://guest:guest@rabbitmq:5672/
+    depends_on:
+      - rabbitmq
+      - inventory-api
+    networks:
+      - itm-network
+
+  gateway-api:
+    image: itm-gateway-api
+    build:
+      context: .
+      dockerfile: Itm.Gateway.Api/Dockerfile
+    container_name: itm-gateway-api
+    ports:
+      - "5000:8080"
+    networks:
+      - itm-network
